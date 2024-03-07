@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Station - {{ period }}</title>
+    <!-- Include Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <ul>
+        <li><a href="/plots?period=hour">Last Hour</a></li>
+        <li><a href="/plots?period=day">Last Day</a></li>
+        <li><a href="/plots?period=week">Last Week</a></li>
+        <li><a href="/plots?period=month">Last Month</a></li>
+        <li><a href="/plots?period=all">All Data</a></li>
+    </ul>
+	<a href="/">Summary</a>
+    <a href="/plots?period={{ period }}&bars=1">Plot bars</a>
+
+    <h1>Weather Station - Showing: {{ period }}</h1>
+
+    <b>Temperature</b>
+    <div id="plot-container-temperature"></div>
+
+    <b>CPU Temperature</b>
+    <div id="plot-container-cpu"></div>
+
+    <b>Humidity</b>
+    <div id="plot-container-humidity"></div>
+
+    <b>Pressure</b>
+    <div id="plot-container-pressure"></div>
+
+    <b>Wind</b>
+    <div id="plot-container-windspeed"></div>
+    <div id="plot-container-windgust"></div>
+    <div id="plot-container-winddirection"></div>
+
+    <b>Rain</b>
+    <div id="plot-container-rain-hour"></div>
+    <div id="plot-container-rain-day"></div>
+
+    <script>
+        // Retrieve the Plotly plot JSON strings passed from Flask
+        var plotJsonTemperature = {{ plot_temperature|tojson|safe }};
+        var plotJsonCpu = {{ plot_cpu|tojson|safe }};
+        var plotJsonHumidity = {{ plot_humidity|tojson|safe }};
+        var plotJsonPressure = {{ plot_pressure|tojson|safe }};
+        var plotJsonWindspeed = {{ plot_windspeed|tojson|safe }};
+        var plotJsonWindgust = {{ plot_windgust|tojson|safe }};
+        var plotJsonWinddirection = {{ plot_winddirection|tojson|safe }};
+        var plotJsonRainHour = {{ plot_rain_hour|tojson|safe }};
+        var plotJsonRainDay = {{ plot_rain_day|tojson|safe }};
+
+        // Parse the JSON strings to create the Plotly plots
+        var plotTemperature = Plotly.plot("plot-container-temperature", JSON.parse(plotJsonTemperature));
+        var plotCpu = Plotly.plot("plot-container-cpu", JSON.parse(plotJsonCpu));
+        var plotHumidity = Plotly.plot("plot-container-humidity", JSON.parse(plotJsonHumidity));
+        var plotPressure = Plotly.plot("plot-container-pressure", JSON.parse(plotJsonPressure));
+        var plotWindspeed = Plotly.plot("plot-container-windspeed", JSON.parse(plotJsonWindspeed));
+        var plotWindgust = Plotly.plot("plot-container-windgust", JSON.parse(plotJsonWindgust));
+        var plotWinddirection = Plotly.plot("plot-container-winddirection", JSON.parse(plotJsonWinddirection));
+        var plotRainHour = Plotly.plot("plot-container-rain-hour", JSON.parse(plotJsonRainHour));
+        var plotRainDay = Plotly.plot("plot-container-rain-day", JSON.parse(plotJsonRainDay));
+    </script>
+</body>
+</html>

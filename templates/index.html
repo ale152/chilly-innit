@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Station Summary</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+        }
+
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 10px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-size: 16px;
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        .title {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .max-min {
+            font-size: 12px;
+            color: #666666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Weather Station Summary</h1>
+        <table>
+            <tr>
+                <th>Timestamp</th>
+                <th>Temperature (°C)</th>
+                <th>Wind Speed (KPH)</th>
+                <th>Wind Direction (°)</th>
+                <th>Gust Speed (KPH)</th>
+                <th>Rain (mm)</th>
+                <th>Humidity (%)</th>
+                <th>Air Pressure (HPA)</th>
+            </tr>
+            {% for _, row in summary_data.iterrows() %}
+            <tr>
+                <td>{{ row.timestamp }}</td>
+                <td>{{ '%0.1f' % row.temp_fahrenheit }}</td>
+                <td>{{ '%0.1f' % row.wind_mph }}</td>
+                <td>{{ row.wind_degree }}</td>
+                <td>{{ '%0.1f' % row.gust_mph }}</td>
+                <td>{{ '%0.1f' % row.rain_hour_cent_inch }}</td>
+                <td>{{ row.humidity_percent }}</td>
+                <td>{{ row.pressure_tenth_hpa }}</td>
+            </tr>
+            <tr class="max-min">
+                <td></td>
+                <td>Max: {{ '%0.1f' % row.temp_fahrenheit_max }}</td>
+                <td>Max: {{ '%0.1f' % row.wind_mph_max }}</td>
+                <td></td>
+                <td>Max: {{ '%0.1f' % row.gust_mph_max }}</td>
+                <td>Max: {{ '%0.1f' % row.rain_hour_cent_inch_max }}</td>
+                <td>Max: {{ row.humidity_percent_max }}</td>
+                <td>Max: {{ row.pressure_tenth_hpa_max }}</td>
+            </tr>
+            <tr class="max-min">
+                <td></td>
+                <td>Min: {{ '%0.1f' % row.temp_fahrenheit_min }}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td>Min: {{ row.humidity_percent_min }}</td>
+                <td>Min: {{ row.pressure_tenth_hpa_min }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+	<a href="/plots">Data plots</a>
+</body>
+</html>
