@@ -275,6 +275,7 @@ if __name__ == '__main__':
     save_data_every_seconds = 10  # Data logging interval
     n_months = 6  # Number of months to keep in the current database
     db_name = f'/home/pi152/weather/data/current_data.db'  # Name of current database
+    reboot_no_data = 1800  # Seconds. If no data is received after this time, reboot the pi
     # Calculate the maximum number of entries for the current database. Older entries after this limit will be deleted
     # and only stored in the zip archives
     max_entries = 3600 / save_data_every_seconds * 24 * 30 * n_months
@@ -313,6 +314,7 @@ if __name__ == '__main__':
 
         # Save it in the database
         current_count = write_db(cursor, data, current_count)
+        last_data_entry = time.time()
 
         # Update the summary
         summary = update_summary(cursor, data, summary)
@@ -340,6 +342,8 @@ if __name__ == '__main__':
         while toc-tic < save_data_every_seconds:
             time.sleep(0.5)
             toc = time.time()
+            if toc - last_data_entry > reboot_no_data:
+                os.system('reboot')
 
         # data = raw_data
         # wind_dir = float(data.split('c')[1].split('s')[0]) # degree
