@@ -181,20 +181,44 @@ def plots():
     period = 'day' if period is None else period
     if period == 'hour':
         show_every_n = 1
-        cond = f" WHERE timestamp BETWEEN datetime('now', '-1 Hour') AND datetime('now', 'localtime') AND rowid % {show_every_n} = 0"
+        where = f"timestamp BETWEEN datetime('now', '-1 Hour') AND datetime('now', 'localtime')"
     elif period == 'day':
-        show_every_n = 8
-        cond = f" WHERE timestamp BETWEEN datetime('now', '-24 Hours') AND datetime('now', 'localtime') AND rowid % {show_every_n} = 0"
+        show_every_n = 24
+        where = f"timestamp BETWEEN datetime('now', '-24 Hours') AND datetime('now', 'localtime')"
     elif period == 'week':
-        show_every_n = 60
-        cond = f" WHERE timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime') AND rowid % {show_every_n} = 0"
+        show_every_n = 168
+        where = f"timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime')"
     elif period == 'month':
-        show_every_n = 260
-        cond = f" WHERE timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime') AND rowid % {show_every_n} = 0"
+        show_every_n = 720
+        where = f"timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime')"
     else:
-        show_every_n = 777
-        cond = f' WHERE rowid % {show_every_n} = 0'
-    df = pd.read_sql_query(f"SELECT * FROM weather_data {cond}", conn)
+        show_every_n = 2160
+        where = f"0 = 0"
+
+
+    query = f"""
+SELECT 
+    strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
+    AVG(wind_degree) AS wind_degree,
+    AVG(wind_mph) AS wind_mph,
+    AVG(gust_mph) AS gust_mph,
+    AVG(temp_fahrenheit) AS temp_fahrenheit,
+    AVG(rain_hour_cent_inch) AS rain_hour_cent_inch,
+    AVG(rain_24h_cent_inch) AS rain_24h_cent_inch,
+    AVG(humidity_percent) AS humidity_percent,
+    AVG(pressure_tenth_hpa) AS pressure_tenth_hpa,
+    AVG(cpu_temp_x10_celsius) AS cpu_temp_x10_celsius
+FROM 
+    weather_data
+WHERE
+    {where}
+GROUP BY 
+    CAST(strftime('%s', timestamp) AS INTEGER) / {show_every_n}
+ORDER BY
+    timestamp;
+"""
+    df = pd.read_sql_query(query, conn)
+#    df = pd.read_sql_query(f"SELECT * FROM weather_data {cond}", conn)
     df = convert_to_metric(df)
 
     plot_temperature = plot_func(df, 'temp_fahrenheit', 'Temperature')
