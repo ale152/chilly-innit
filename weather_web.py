@@ -177,22 +177,27 @@ def plots():
     # Points in a month = 259200, subsample 720
     # Points in 3 months = 777600, subsample 2160
 
+    # Number of points to display
+    n_points = 360
+    # Sample frequency
+    sf = 10
+
     # Read selected period
     period = 'day' if period is None else period
     if period == 'hour':
-        show_every_n = 1
+        show_every_n = 3600/sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-1 Hour') AND datetime('now', 'localtime')"
     elif period == 'day':
-        show_every_n = 24
+        show_every_n = 3600*24/sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-24 Hours') AND datetime('now', 'localtime')"
     elif period == 'week':
-        show_every_n = 168
+        show_every_n = 3600*24*7/sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime')"
     elif period == 'month':
-        show_every_n = 720
+        show_every_n = 3600*24*30/sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime')"
     else:
-        show_every_n = 2160
+        show_every_n = 3600*24*7*30*3/sf // n_points
         where = f"0 = 0"
 
 
