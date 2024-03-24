@@ -261,10 +261,15 @@ def index():
     summary_data = pd.read_sql_query(f"SELECT * FROM weather_summary", conn)
     summary_data = convert_to_metric(summary_data)
 
-    # query = 'SELECT * FROM weather_summary'
-    # summary_data = read_db(cursor, query)
+    # Generate health summary by looking at the sampling frequency of the last hour
+    time_data = pd.read_sql_query(f"SELECT timestamp "
+                                     f"FROM weather_data "
+                                     f"WHERE timestamp "
+                                     f"BETWEEN datetime('now', '-1 Hour') "
+                                     f"AND datetime('now', 'localtime')", conn)
+    average_sampling = time_data.timestamp.diff().mean()
 
-    return render_template('index.html', summary_data=summary_data)
+    return render_template('index.html', summary_data=summary_data, average_sampling=average_sampling)
 
 if __name__ == '__main__':
 
