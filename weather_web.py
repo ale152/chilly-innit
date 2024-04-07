@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import base64
+import os
 import sqlite3
 import logging
 import numpy as np
@@ -245,6 +246,11 @@ ORDER BY
 @app.route('/')
 def index():
     db_name = f'/home/pi152/weather/data/current_data.db'  # Name of current database
+
+    reboot = request.args.get('reboot')
+    if reboot == 'now':
+        os.system('sudo shutdown -r now')
+
     # Read all data
     conn, cursor = connect_db(db_name)
 
