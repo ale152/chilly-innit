@@ -22,6 +22,20 @@ query_create_db = '''
             cpu_temp_x10_celsius INTEGER
         );
     '''
+query_create_db_hour = '''
+        CREATE TABLE IF NOT EXISTS weather_hour (
+            timestamp TIMESTAMP,
+            wind_degree INTEGER,
+            wind_mph INTEGER,
+            gust_mph INTEGER,
+            temp_fahrenheit INTEGER,
+            rain_hour_cent_inch INTEGER,
+            rain_24h_cent_inch INTEGER,
+            humidity_percent INTEGER,
+            pressure_tenth_hpa INTEGER,
+            cpu_temp_x10_celsius INTEGER
+        );
+    '''
 query_create_summary = '''        
         CREATE TABLE IF NOT EXISTS weather_summary (
             timestamp TIMESTAMP,
