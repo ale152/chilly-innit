@@ -236,7 +236,7 @@ def dump_last_month(last_year, last_month, cursor):
 
         # Create a new SQLite database file
         dump_path = f'/home/pi152/weather/data/'
-        dump_filename = 'weather_{last_year}_{last_month:02d}.db'
+        dump_filename = f'weather_{last_year}_{last_month:02d}.db'
         new_conn = sqlite3.connect(dump_path + dump_filename)
         new_cursor = new_conn.cursor()
 
