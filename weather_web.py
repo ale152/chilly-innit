@@ -158,19 +158,9 @@ def generate_plot_bar(df, target, label):
     plot_json = fig.to_json()
 
     return plot_json
-    
-@app.route('/plots')
-def plots():
-    # Read the 'period' parameter from the query string
-    period = request.args.get('period')
-    bars = request.args.get('bars')
 
-    plot_func = generate_plot_bar if bars else generate_plot
 
-    db_name = f'/home/pi152/weather/data/current_data.db'  # Name of current database
-    # Read all data
-    conn, cursor = connect_db(db_name)
-
+def generate_avg_query(period):
     # save every 10 seconds
     # Points in hour = 360
     # Points in a day = 8640, subsample 24
@@ -186,45 +176,111 @@ def plots():
     # Read selected period
     period = 'day' if period is None else period
     if period == 'hour':
-        show_every_n = 3600/sf // n_points
+        show_every_n = 3600 / sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-1 Hour') AND datetime('now', 'localtime')"
     elif period == 'day':
-        show_every_n = 3600*24/sf // n_points
+        show_every_n = 3600 * 24 / sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-24 Hours') AND datetime('now', 'localtime')"
     elif period == 'week':
-        show_every_n = 3600*24*7/sf // n_points
+        show_every_n = 3600 * 24 * 7 / sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime')"
     elif period == 'month':
-        show_every_n = 3600*24*30/sf // n_points
+        show_every_n = 3600 * 24 * 30 / sf // n_points
         where = f"timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime')"
     else:
-        show_every_n = 3600*24*7*30*3/sf // n_points
+        show_every_n = 3600 * 24 * 7 * 30 * 3 / sf // n_points
         where = f"0 = 0"
 
+    query = f"""
+    SELECT 
+        strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
+        AVG(wind_degree) AS wind_degree,
+        AVG(wind_mph) AS wind_mph,
+        AVG(gust_mph) AS gust_mph,
+        AVG(temp_fahrenheit) AS temp_fahrenheit,
+        AVG(rain_hour_cent_inch) AS rain_hour_cent_inch,
+        AVG(rain_24h_cent_inch) AS rain_24h_cent_inch,
+        AVG(humidity_percent) AS humidity_percent,
+        AVG(pressure_tenth_hpa) AS pressure_tenth_hpa,
+        AVG(cpu_temp_x10_celsius) AS cpu_temp_x10_celsius
+    FROM 
+        weather_data
+    WHERE
+        {where}
+    GROUP BY 
+        CAST(strftime('%s', timestamp) AS INTEGER) / {show_every_n}
+    ORDER BY
+        timestamp;
+    """
+
+    return query
+
+
+def generate_hour_query(period):
+    # save every 10 seconds
+    # Points in hour = 360
+    # Points in a day = 8640, subsample 24
+    # Points in a week = 60480, subsample 168
+    # Points in a month = 259200, subsample 720
+    # Points in 3 months = 777600, subsample 2160
+
+    # Number of points to display
+    n_points = 360
+    # Sample frequency
+    sf = 10
+
+    if period == 'hour':
+        show_every_n = 3600 / sf // n_points
+        where = f"timestamp BETWEEN datetime('now', '-1 Hour') AND datetime('now', 'localtime')"
+    elif period == 'day':
+        show_every_n = 3600 * 24 / sf // n_points
+        where = f"timestamp BETWEEN datetime('now', '-24 Hours') AND datetime('now', 'localtime')"
+    elif period == 'week':
+        show_every_n = 3600 * 24 * 7 / sf // n_points
+        where = f"timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime')"
+    elif period == 'month':
+        show_every_n = 3600 * 24 * 30 / sf // n_points
+        where = f"timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime')"
+    else:
+        show_every_n = 3600 * 24 * 7 * 30 * 3 / sf // n_points
+        where = f"0 = 0"
 
     query = f"""
-SELECT 
-    strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
-    AVG(wind_degree) AS wind_degree,
-    AVG(wind_mph) AS wind_mph,
-    AVG(gust_mph) AS gust_mph,
-    AVG(temp_fahrenheit) AS temp_fahrenheit,
-    AVG(rain_hour_cent_inch) AS rain_hour_cent_inch,
-    AVG(rain_24h_cent_inch) AS rain_24h_cent_inch,
-    AVG(humidity_percent) AS humidity_percent,
-    AVG(pressure_tenth_hpa) AS pressure_tenth_hpa,
-    AVG(cpu_temp_x10_celsius) AS cpu_temp_x10_celsius
-FROM 
-    weather_data
-WHERE
-    {where}
-GROUP BY 
-    CAST(strftime('%s', timestamp) AS INTEGER) / {show_every_n}
-ORDER BY
-    timestamp;
-"""
+    SELECT 
+        *
+    FROM 
+        weather_hour
+    WHERE
+        {where}
+    ORDER BY
+        timestamp;
+    """
+
+    return query
+
+
+@app.route('/plots')
+def plots():
+    # Read the 'period' parameter from the query string
+    period = request.args.get('period')
+    bars = request.args.get('bars')
+
+    plot_func = generate_plot_bar if bars else generate_plot
+
+    db_name = f'/home/pi152/weather/data/current_data.db'  # Name of current database
+    # Read all data
+    conn, cursor = connect_db(db_name)
+
+    # Read selected period
+    period = 'day' if period is None else period
+    if period in ['hour', 'day']:
+        # Gets current data and calculates averages
+        query = generate_avg_query(period)
+    else:
+        # Gets data from the hourly summary table
+        query = generate_hour_query(period)
+
     df = pd.read_sql_query(query, conn)
-#    df = pd.read_sql_query(f"SELECT * FROM weather_data {cond}", conn)
     df = convert_to_metric(df)
 
     plot_temperature = plot_func(df, 'temp_fahrenheit', 'Temperature')
