@@ -393,7 +393,7 @@ if __name__ == '__main__':
             open('info.log', 'w').close()
 
         # If the database reaches the maximum number of entries, remove the oldest entry
-        current_count = flush_old_entries(current_count, max_entries, cursor)
+        # current_count = flush_old_entries(current_count, max_entries, cursor)
 
         # Back to sleep
         #logging.info('Going to sleep now...')
