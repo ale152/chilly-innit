@@ -120,6 +120,7 @@ def init_db(db_name):
 
         cursor = conn.cursor()
         cursor.execute(query_create_db)
+        cursor.execute(query_create_db_hour)
         cursor.execute(query_create_summary)
         conn.commit()
         # Check that the weather summary has an entry
@@ -284,6 +285,44 @@ def read_cpu_temp():
     except Exception as error:
         logging.error(f"Error while reading the CPU temp:\n{error}")
 
+
+def update_hour_db(cursor, conn):
+    # Query to select the average values within the last hour and update the weather_hour table
+    query = '''
+    INSERT INTO weather_hour (
+    timestamp,
+    wind_degree,
+    wind_mph,
+    gust_mph,
+    temp_fahrenheit,
+    rain_hour_cent_inch,
+    rain_24h_cent_inch,
+    humidity_percent,
+    pressure_tenth_hpa,
+    cpu_temp_x10_celsius
+)
+SELECT 
+    strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
+    AVG(wind_degree) AS wind_degree,
+    AVG(wind_mph) AS wind_mph,
+    MAX(gust_mph) AS gust_mph,
+    AVG(temp_fahrenheit) AS temp_fahrenheit,
+    AVG(rain_hour_cent_inch) AS rain_hour_cent_inch,
+    AVG(rain_24h_cent_inch) AS rain_24h_cent_inch,
+    AVG(humidity_percent) AS humidity_percent,
+    AVG(pressure_tenth_hpa) AS pressure_tenth_hpa,
+    AVG(cpu_temp_x10_celsius) AS cpu_temp_x10_celsius
+FROM 
+    weather_data
+WHERE 
+    timestamp BETWEEN datetime('now', '-1 Hour') AND datetime('now', 'localtime')
+GROUP BY 
+    CAST(strftime('%s', timestamp) AS INTEGER) / 3600
+'''
+    cursor.execute(query)
+    conn.commit()
+
+
 if __name__ == '__main__':
     # Parameters
     save_data_every_seconds = 10  # Data logging interval
@@ -310,7 +349,7 @@ if __name__ == '__main__':
     current_count = count_db_entries(cursor)
     summary = read_db_summary(cursor)
     last_dump = datetime.date.today()
-
+    last_hour_update = time.time() // 3600
 
     # Running loop
     while True:
@@ -332,6 +371,12 @@ if __name__ == '__main__':
 
         # Update the summary
         summary = update_summary(cursor, data, summary)
+
+        # Update the hour database
+        current_hour = time.time() // 3600
+        if current_hour != last_hour_update:
+            last_hour_update = current_hour
+            update_hour_db(cursor, conn)
 
         # At the end of each month zip the last month
         current_month = datetime.date.today().month
