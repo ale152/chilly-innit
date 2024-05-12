@@ -81,17 +81,23 @@ def read_serial(ser):
             try:
                 char = ser.read().decode('utf-8')
                 if char == 'c':
-                    raw_data = ser.read(32)
-                    break
+                    # If the character detected is a "c", read 32 sequential bits one at a time
+                    raw_data = ''
+                    for _ in range(32):
+                        try:
+                            data_char = ser.read().decode('utf-8')
+                            raw_data += data_char
+                        except UnicodeDecodeError:
+                            # The "c" was random noise, not the first character of a data sequence
+                            break
+                    else:
+                        # Full message acquired!
+                        break
             except UnicodeDecodeError:
                 continue
-     
-        try:
-            text_data = 'c' + raw_data.decode('utf-8').strip()
-            return text_data
-        except UnicodeDecodeError as error:
-            #logging.error(f"Error while decoding the serial message:\n{error}")
-            continue
+
+        text_data = 'c' + raw_data.strip()
+        return text_data
 
 def decode_weather_msg(msg):
     sensor_entries = ['wind_degree', 'wind_mph', 'gust_mph', 'temp_fahrenheit', 'rain_hour_cent_inch',
