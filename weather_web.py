@@ -4,6 +4,7 @@ import base64
 import os
 import sqlite3
 import logging
+import subprocess
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -331,7 +332,9 @@ def index():
                                      f"AND datetime('now', 'localtime')", conn)
     average_sampling = time_data.timestamp.diff().mean()
 
-    return render_template('index.html', summary_data=summary_data, average_sampling=average_sampling)
+    disk_usage = subprocess.check_output("df -h | head -n 2", shell=True).decode("utf-8")
+
+    return render_template('index.html', summary_data=summary_data, average_sampling=average_sampling, disk_usage=disk_usage)
 
 if __name__ == '__main__':
 
