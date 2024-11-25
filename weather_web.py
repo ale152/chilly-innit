@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import base64
+import io
 import os
 import sqlite3
 import logging
@@ -11,8 +12,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.dates as md
 import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+from matplotlib.ticker import MaxNLocator
+from datetime import datetime
 from io import BytesIO
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 from flask_compress import Compress
 
 app = Flask(__name__)
@@ -111,7 +115,12 @@ def reset_min_max(cursor, conn):
     conn.commit()
 
 def convert_to_metric(df):
-    for column in df.columns:
+    if isinstance(df, pd.DataFrame):
+        names = df.columns
+    else:
+        names = df.keys()
+
+    for column in names:
         if 'mph' in column:
             df[column] *= 1.609344  # mph to kmh
         if 'fahrenheit' in column:
@@ -260,6 +269,148 @@ def generate_hour_query(period):
     return query
 
 
+def multiplot(metrics, labels, aggs, colors, figsize=(12, 8)):
+    db_name = f'/home/pi152/weather/data/current_data.db'  # Name of current database
+    conn, cursor = connect_db(db_name)
+
+    # Define queries
+    metric_1, metric_2, metric_3 = metrics
+    label_1, label_2, label_3 = labels
+    agg_1, agg_2, agg_3 = aggs
+    color_1, color_2, color_3 = colors
+    query_last_month = f"""
+            SELECT 
+                strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
+                {agg_1}({metric_1}) as {agg_1}_{metric_1},
+                {agg_2}({metric_2}) as {agg_2}_{metric_2},
+                {agg_3}({metric_3}) as {agg_3}_{metric_3}
+            FROM 
+                weather_data
+            WHERE
+                timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime')
+            GROUP BY 
+                CAST(strftime('%s', timestamp) AS INTEGER) / (3600)  -- Group by hours
+            ORDER BY
+                timestamp;
+        """
+
+    query_last_week = f"""
+            SELECT 
+                strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
+                {agg_1}({metric_1}) as {agg_1}_{metric_1},
+                {agg_2}({metric_2}) as {agg_2}_{metric_2},
+                {agg_3}({metric_3}) as {agg_3}_{metric_3}
+            FROM 
+                weather_data
+            WHERE
+                timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime')
+            GROUP BY 
+                CAST(strftime('%s', timestamp) AS INTEGER) / (900)  -- Group by 15 minutes
+            ORDER BY
+                timestamp;
+        """
+
+    query_last_day = f"""
+            SELECT 
+                strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp,
+                {metric_1} as {agg_1}_{metric_1},
+                {metric_2} as {agg_2}_{metric_2},
+                {metric_3} as {agg_3}_{metric_3}
+            FROM 
+                weather_data
+            WHERE
+                timestamp BETWEEN datetime('now', '-1 day') AND datetime('now', 'localtime')
+            ORDER BY
+                timestamp;
+        """
+
+    # Fetch and preprocess data
+    data_last_month = convert_to_metric(pd.read_sql_query(query_last_month, conn))
+    data_last_week = convert_to_metric(pd.read_sql_query(query_last_week, conn))
+    data_last_day = convert_to_metric(pd.read_sql_query(query_last_day, conn))
+
+    # Convert the `timestamp` column to datetime format
+    data_last_month['timestamp'] = pd.to_datetime(data_last_month['timestamp'])
+    data_last_week['timestamp'] = pd.to_datetime(data_last_week['timestamp'])
+    data_last_day['timestamp'] = pd.to_datetime(data_last_day['timestamp'])
+
+    # Subsample the last day's data
+    data_last_day = data_last_day.iloc[::2]
+
+    # Create a 2x2 grid layout
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    gs = fig.add_gridspec(2, 2)
+
+    # Function to add a secondary axis to the plot
+    def add_second_ax(ax, data, column, label='', color='lightgray', **kwargs):
+        ax_twin = ax.twinx()  # Create secondary y-axis
+        ax_twin.fill_between(data['timestamp'], data[column], np.min(data[column]), color=color,
+                             label=column, **kwargs)
+        ax_twin.set_ylabel(label, color=color)
+        ax_twin.tick_params(axis='y', colors=color)
+        ax_twin.grid(False)  # Disable grid on secondary axis
+        return ax_twin
+
+    # Function to format axis
+    def format_ax(ax, twin, label, timeformat, max_n):
+        ax.set_title(label)
+        ax.set_xlabel('Time')
+        ax.grid(True)
+        ax.legend()
+        ax.tick_params(axis='x', rotation=45)
+        ax.xaxis.set_major_locator(MaxNLocator(max_n))
+        ax.xaxis.set_major_formatter(DateFormatter(timeformat))
+        ax.set_axisbelow(True)
+        ax.yaxis.grid(color='gray', linestyle=':')
+        ax.xaxis.grid(color='gray', linestyle=':')
+        ax.set_zorder(twin.get_zorder() + 1)
+        ax.patch.set_visible(False)
+
+    # Add the first subplot spanning the entire first row
+    ax1 = fig.add_subplot(gs[0, :])  # Spans all columns in the first row
+    ax1.plot(data_last_month['timestamp'], data_last_month[agg_1 + "_" + metric_1], label=label_1,
+             color=color_1)
+    ax1.plot(data_last_month['timestamp'], data_last_month[agg_2 + "_" + metric_2], label=label_2,
+             color=color_2)
+    twin1 = add_second_ax(ax1, data_last_month, agg_3 + "_" + metric_3, label_3,
+                          color_3)  # Plot humidity as background
+    format_ax(ax1, twin1, 'Last Month', '%d/%m/%Y', 30)
+
+    # Add the second subplot for the last week (bottom-left)
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax2.plot(data_last_week['timestamp'], data_last_week[agg_1 + "_" + metric_1], label=label_1,
+             color=color_1)
+    ax2.plot(data_last_week['timestamp'], data_last_week[agg_2 + "_" + metric_2], label=label_2,
+             color=color_2)
+    twin2 = add_second_ax(ax2, data_last_week, agg_3 + "_" + metric_3, label_3,
+                          color_3)  # Plot humidity as background
+    format_ax(ax2, twin2, 'Last Week', '%d/%m/%Y', 7)
+
+    # Add the third subplot for the last day (bottom-right)
+    ax3 = fig.add_subplot(gs[1, 1])
+    ax3.plot(data_last_day['timestamp'], data_last_day[agg_1 + "_" + metric_1], label=label_1,
+             color=color_1)
+    ax3.plot(data_last_day['timestamp'], data_last_day[agg_2 + "_" + metric_2], label=label_2,
+             color=color_2)
+    twin3 = add_second_ax(ax3, data_last_day, agg_3 + "_" + metric_3, label_3,
+                          color_3)  # Plot humidity as background
+    format_ax(ax3, twin3, 'Last Day', '%H:%M', 12)
+
+    # Show the plots
+    plt.show()
+
+    # Remove extra spacing between subplots
+    plt.tight_layout()
+
+    # Save the plot to a BytesIO object
+    img_bytes = io.BytesIO()
+    plt.savefig(img_bytes, format='png')
+    img_bytes.seek(0)  # Rewind the buffer to the beginning
+    plt.close(fig)  # Close the figure to free memory
+
+    return img_bytes
+
+
 @app.route('/plots')
 def plots():
     # Read the 'period' parameter from the query string
@@ -299,6 +450,38 @@ def plots():
                            plot_rain_day=plot_rain_day,
                            period=period)
 
+
+@app.route('/temp.png')
+def temp_image():
+    # Read the data
+    img_bytes = multiplot(['temp_fahrenheit', 'temp_fahrenheit', 'humidity_percent'],
+                          ['Min Temperature (°C)', 'Max Temperature (°C)', 'Humidity (%)'],
+                          ['MIN', 'MAX', 'AVG'], ['#1f77b4', '#ff7f0e', '#b5b5b5'])
+
+    # Serve the image as a response
+    return Response(img_bytes, mimetype='image/png')
+
+
+@app.route('/rain.png')
+def rain_image():
+    # Read the data
+    img_bytes = multiplot(['rain_hour_cent_inch', 'rain_24h_cent_inch', 'humidity_percent'],
+                        ['Rain (mm/hour)', 'Rain (mm/day)', 'Humidity (%)'],
+                        ['MAX', 'MAX', 'AVG'], ['#cc2929', '#cfbd19', '#868fb5'])
+
+    # Serve the image as a response
+    return Response(img_bytes, mimetype='image/png')
+
+
+@app.route('/wind.png')
+def wind_image():
+    # Read the data
+    img_bytes = multiplot(['wind_mph', 'gust_mph', 'pressure_tenth_hpa'],
+                          ['Wind (km/h)', 'Gust (km/h)', 'Pressure (hPa)'],
+                          ['MAX', 'MAX', 'AVG'], ['#005AB5', '#DC3220', '#c9bc9d'])
+
+    # Serve the image as a response
+    return Response(img_bytes, mimetype='image/png')
 
 @app.route('/')
 def index():
