@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+# To see the status:
+# sudo journalctl -u weather.service -n 20 -f
+
 import os
 import time
 import serial
@@ -7,6 +10,9 @@ import logging
 import zipfile
 import sqlite3
 import datetime
+
+from multiprocessing import Process
+from weather_web import generate_figures
 
 query_create_db = '''
         CREATE TABLE IF NOT EXISTS weather_data (
@@ -383,6 +389,10 @@ if __name__ == '__main__':
         if current_hour != last_hour_update:
             last_hour_update = current_hour
             update_hour_db(cursor, conn)
+
+            # Generate the matplotlib figures without stopping the main loop
+            plot_process = Process(target=generate_figures)
+            plot_process.start()
 
         # At the end of each month zip the last month
         current_month = datetime.date.today().month

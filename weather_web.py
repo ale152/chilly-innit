@@ -1,4 +1,7 @@
 #!/usr/bin/python
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 
 import base64
 import io
@@ -268,19 +271,13 @@ def generate_hour_query(period):
     return query
 
 
-def multiplot(metrics, labels, aggs, colors):
+def multiplot(metrics, labels, aggs, colors, live_request=False):
     db_name = f'/home/pi152/weather/data/current_data.db'  # Name of current database
     conn, cursor = connect_db(db_name)
 
     # Read the figure size
-    width = request.args.get('w')
-    height = request.args.get('h')
-    if width and height:
-        width = int(width)
-        height = int(height)
-    else:
-        width = 12
-        height = 8
+    width = int(request.args.get('w', 12)) if live_request else 12
+    height = int(request.args.get('h', 8)) if live_request else 8
     figsize = (width, height)
 
     # Define queries
@@ -297,7 +294,7 @@ def multiplot(metrics, labels, aggs, colors):
                 {agg_2}({metric_2}) as {agg_2}_{metric_2},
                 {agg_3}({metric_3}) as {agg_3}_{metric_3}
             FROM 
-                weather_data
+                weather_hour
             WHERE
                 timestamp BETWEEN datetime('now', '-30 days') AND datetime('now', 'localtime')
             GROUP BY 
@@ -312,7 +309,7 @@ def multiplot(metrics, labels, aggs, colors):
                 {agg_2}({metric_2}) as {agg_2}_{metric_2},
                 {agg_3}({metric_3}) as {agg_3}_{metric_3}
             FROM 
-                weather_data
+                weather_hour
             WHERE
                 timestamp BETWEEN datetime('now', '-7 days') AND datetime('now', 'localtime')
             GROUP BY 
@@ -358,7 +355,7 @@ def multiplot(metrics, labels, aggs, colors):
     data_last_day = {k: v[::2] for k, v in data_last_day.items()}
 
     # Create a 2x2 grid layout
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(2, 2)
 
     # Function to add a secondary axis to the plot
@@ -396,7 +393,7 @@ def multiplot(metrics, labels, aggs, colors):
                           color_3)
     mi = min(data_last_month[agg_1 + "_" + metric_1] + data_last_month[agg_2 + "_" + metric_2])
     ma = max(data_last_month[agg_1 + "_" + metric_1] + data_last_month[agg_2 + "_" + metric_2])
-    format_ax(ax1, twin1, f'Last Month [Min:{mi} Max: {ma}]', '%d/%m/%Y', 30)
+    format_ax(ax1, twin1, f'Last Month [Min:{mi:.2f} Max: {ma:.2f}]', '%d/%m/%Y', 30)
 
     # Add the second subplot for the last week
     ax2 = fig.add_subplot(gs[1, 0])
@@ -417,7 +414,7 @@ def multiplot(metrics, labels, aggs, colors):
     twin3 = add_second_ax(ax3, data_last_day, agg_3 + "_" + metric_3, label_3,
                           color_3)
     la = (data_last_day[agg_1 + "_" + metric_1][-1], data_last_day[agg_2 + "_" + metric_2][-1])
-    format_ax(ax3, twin3, f'Last Day (last values: {la})', '%H:%M', 12)
+    format_ax(ax3, twin3, f'Last Day (last values: {la[0]:.2f} {la[1]:.2f})', '%H:%M', 12)
 
     # Show the plots
     plt.show()
@@ -432,6 +429,30 @@ def multiplot(metrics, labels, aggs, colors):
     plt.close(fig)
 
     return img_bytes
+
+
+def generate_figures():
+    temp_bytes = multiplot(['temp_fahrenheit', 'temp_fahrenheit', 'humidity_percent'],
+              ['Min Temperature (°C)', 'Max Temperature (°C)', 'Humidity (%)'],
+              ['MIN', 'MAX', 'AVG'], ['#005AB5', '#DC3220', '#c9bc9d'])
+
+    rain_bytes = multiplot(['rain_hour_cent_inch', 'rain_24h_cent_inch', 'humidity_percent'],
+                          ['Rain (mm/hour)', 'Rain (mm/day)', 'Humidity (%)'],
+                          ['MAX', 'MAX', 'AVG'], ['#cc2929', '#cfbd19', '#868fb5'])
+
+    wind_bytes = multiplot(['wind_mph', 'gust_mph', 'pressure_tenth_hpa'],
+                          ['Wind (km/h)', 'Gust (km/h)', 'Pressure (hPa)'],
+                          ['MAX', 'MAX', 'AVG'], ['#1f77b4', '#ff7f0e', '#b5b5b5'])
+
+    try:
+        with open('/home/pi152/weather/data/temp.png', 'wb') as f:
+            f.write(temp_bytes.getvalue())
+        with open('/home/pi152/weather/data/rain.png', 'wb') as f:
+            f.write(rain_bytes.getvalue())
+        with open('/home/pi152/weather/data/wind.png', 'wb') as f:
+            f.write(wind_bytes.getvalue())
+    except Exception as error:
+        logging.error(f"Error while generating the matplotlib figures:\n{error}")
 
 
 @app.route('/plots')
@@ -476,10 +497,14 @@ def plots():
 
 @app.route('/temp.png')
 def temp_image():
+    # Generate the figures if requested
+    live_request = request.args.get('live')
+    if live_request:
+        generate_figures()
+
     # Read the data
-    img_bytes = multiplot(['temp_fahrenheit', 'temp_fahrenheit', 'humidity_percent'],
-                          ['Min Temperature (°C)', 'Max Temperature (°C)', 'Humidity (%)'],
-                          ['MIN', 'MAX', 'AVG'], ['#005AB5', '#DC3220', '#c9bc9d'])
+    with open('/home/pi152/weather/data/temp.png', 'rb') as f:
+        img_bytes = f.read()
 
     # Serve the image as a response
     return Response(img_bytes, mimetype='image/png')
@@ -487,10 +512,14 @@ def temp_image():
 
 @app.route('/rain.png')
 def rain_image():
+    # Generate the figures if requested
+    live_request = request.args.get('live')
+    if live_request:
+        generate_figures()
+
     # Read the data
-    img_bytes = multiplot(['rain_hour_cent_inch', 'rain_24h_cent_inch', 'humidity_percent'],
-                        ['Rain (mm/hour)', 'Rain (mm/day)', 'Humidity (%)'],
-                        ['MAX', 'MAX', 'AVG'], ['#cc2929', '#cfbd19', '#868fb5'])
+    with open('/home/pi152/weather/data/rain.png', 'rb') as f:
+        img_bytes = f.read()
 
     # Serve the image as a response
     return Response(img_bytes, mimetype='image/png')
@@ -498,10 +527,14 @@ def rain_image():
 
 @app.route('/wind.png')
 def wind_image():
+    # Generate the figures if requested
+    live_request = request.args.get('live')
+    if live_request:
+        generate_figures()
+
     # Read the data
-    img_bytes = multiplot(['wind_mph', 'gust_mph', 'pressure_tenth_hpa'],
-                          ['Wind (km/h)', 'Gust (km/h)', 'Pressure (hPa)'],
-                          ['MAX', 'MAX', 'AVG'], ['#1f77b4', '#ff7f0e', '#b5b5b5'])
+    with open('/home/pi152/weather/data/wind.png', 'rb') as f:
+        img_bytes = f.read()
 
     # Serve the image as a response
     return Response(img_bytes, mimetype='image/png')
